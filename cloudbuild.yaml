@@ -1,0 +1,40 @@
+# cloudbuild.yaml
+steps:
+  # Build product service
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'us-central1-docker.pkg.dev/ecommerce-cloudrun/kong-microservices/product-service:$SHORT_SHA', './services/product-service']
+
+  # Build user service
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'us-central1-docker.pkg.dev/ecommerce-cloudrun/kong-microservices/user-service:$SHORT_SHA', './services/user-service']
+
+  # Push images to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'us-central1-docker.pkg.dev/ecommerce-cloudrun/kong-microservices/product-service:$SHORT_SHA']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'us-central1-docker.pkg.dev/ecommerce-cloudrun/kong-microservices/user-service:$SHORT_SHA']
+
+  # Prepare Kubernetes manifests with the new image tag
+  - name: 'gcr.io/cloud-builders/gke-deploy'
+    args:
+      - 'prepare'
+      - '--filename=./kubernetes/'
+      - '--image=us-central1-docker.pkg.dev/ecommerce-cloudrun/kong-microservices/product-service:$SHORT_SHA'
+      - '--image=us-central1-docker.pkg.dev/ecommerce-cloudrun/kong-microservices/user-service:$SHORT_SHA'
+      - '--app=kong-microservices'
+      - '--version=$SHORT_SHA'
+
+  # Apply the manifests to the GKE cluster
+  - name: 'gcr.io/cloud-builders/kubectl'
+    args:
+      - 'apply'
+      - '-f'
+      - 'output/expanded/'
+    env:
+      - 'CLOUDSDK_COMPUTE_REGION=us-central1'
+      - 'CLOUDSDK_CONTAINER_CLUSTER=kong-demo-cluster'
+
+# Store the built images in Artifact Registry
+images:
+  - 'us-central1-docker.pkg.dev/ecommerce-cloudrun/kong-microservices/product-service:$SHORT_SHA'
+  - 'us-central1-docker.pkg.dev/ecommerce-cloudrun/kong-microservices/user-service:$SHORT_SHA'
